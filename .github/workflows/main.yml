@@ -1,0 +1,60 @@
+name: Build Jhatpat APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Prepare Flutter project
+        shell: bash
+        run: |
+          set -e
+
+          if [ -f pubspec.yaml ]; then
+            echo "Flutter project found in repository root."
+            echo "PROJECT_DIR=." >> "$GITHUB_ENV"
+          elif [ -f jhatpat_app_source.zip ]; then
+            echo "Extracting Flutter source ZIP..."
+            mkdir -p extracted
+            unzip -o jhatpat_app_source.zip -d extracted
+
+            PROJECT_DIR=$(find extracted -name pubspec.yaml -type f -print -quit | xargs -r dirname)
+
+            if [ -z "$PROJECT_DIR" ]; then
+              echo "ERROR: pubspec.yaml was not found."
+              exit 1
+            fi
+
+            echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          else
+            echo "ERROR: pubspec.yaml or jhatpat_app_source.zip not found."
+            exit 1
+          fi
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Get dependencies
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: flutter pub get
+
+      - name: Build release APK
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: jhatpat-release-apk
+          path: ${{ env.PROJECT_DIR }}/build/app/outputs/flutter-apk/app-release.apk
